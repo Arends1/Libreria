@@ -37,30 +37,63 @@ grupos_excluyentes = [
 class VistaListaApp:
     def __init__(self, root):
         self.nodo_seleccionado = None
-
         self.root = root
         self.root.title("Gestión de Estudiantes")
 
+        # Scroll
+        self.scroll_canvas = tk.Canvas(self.root)
+        self.scroll_canvas.pack(side="left", fill="both", expand=True)
+
+        scrollbar = tk.Scrollbar(self.root, orient="vertical", command=self.scroll_canvas.yview)
+        scrollbar.pack(side="right", fill="y")
+
+        self.scroll_canvas.configure(yscrollcommand=scrollbar.set)
+
+        # Frame dentro del canvas donde irá todo el contenido
+        self.scroll_frame = tk.Frame(self.scroll_canvas)
+        self.scroll_canvas.create_window((0, 0), window=self.scroll_frame, anchor="nw")
+
+        # región scrollable
+        self.scroll_frame.bind("<Configure>", lambda e: self.scroll_canvas.configure(scrollregion=self.scroll_canvas.bbox("all")))
+
+        
         self.lista_ingresados = Lista()
         self.lista_no_ingresados = Lista()
 
-        self.titulo = tk.Label(self.root, text="Gestión de Estudiantes", font=("Arial", 20))
+        # 
+        self.titulo = tk.Label(self.scroll_frame, text="Gestión de Estudiantes", font=("Arial", 20))
         self.titulo.pack(side="top", pady=10)
 
-        self.frame_busquedas = tk.Frame(root)
+      
+        self.frame_busquedas = tk.Frame(self.scroll_frame)
         self.frame_busquedas.pack(padx=10, pady=5)
-        # Busqueda de los ingresados
-        tk.Label(self.frame_busquedas, text="Buscar Ingresados:").grid(row=0, column=0)
+        
+        # Combobox que filtra por Todos e irregulares
+        tk.Label(self.frame_busquedas, text="Filtrar:").grid(row=0, column=0, padx=(10, 5), sticky="w")
+        self.combobox_filtro_ingresados = ttk.Combobox(
+        self.frame_busquedas,
+        values=["Todos", "Irregulares"],
+        state="readonly",
+        width=15
+         )
+        self.combobox_filtro_ingresados.current(0)
+        self.combobox_filtro_ingresados.grid(row=0, column=1, padx=(0, 20), sticky="w")
+        self.combobox_filtro_ingresados.bind("<<ComboboxSelected>>", self.filtrando_ingresados)
+
+        #Busqueda de los ingresados
+        tk.Label(self.frame_busquedas, text="Buscar Ingresados:").grid(row=0, column=2, padx=(10, 5), sticky="w")
         self.entry_buscar_ingresados = tk.Entry(self.frame_busquedas)
-        self.entry_buscar_ingresados.grid(row=0, column=1, padx=(5, 50))
+        self.entry_buscar_ingresados.grid(row=0, column=3, padx=(0, 50), sticky="w")
         self.entry_buscar_ingresados.bind("<KeyRelease>", self.filtrar_ingresados)
-        # Busqueda no ingresados
+ 
+        # Busqueda  no ingresados
         tk.Label(self.frame_busquedas, text="Buscar No Ingresados:").grid(row=0, column=4, padx=(80, 0))
         self.entry_buscar_no_ingresados = tk.Entry(self.frame_busquedas)
         self.entry_buscar_no_ingresados.grid(row=0, column=5, padx=(20, 5))
         self.entry_buscar_no_ingresados.bind("<KeyRelease>", self.filtrar_no_ingresados)
 
-        self.frame_tablas = tk.Frame(root)
+        # Tablas
+        self.frame_tablas = tk.Frame(self.scroll_frame)
         self.frame_tablas.pack(fill="x", expand=True, padx=10)
 
         self.frame_tablas.grid_columnconfigure(0, weight=1)
@@ -76,10 +109,10 @@ class VistaListaApp:
         self.contador_no_ingresados.grid(row=1, column=1, pady=(0, 10))
 
         self.tree_ingresados.bind("<<TreeviewSelect>>", lambda e: self.autocompletar_desde_tabla(self.tree_ingresados))
-        self.tree_no_ingresados.bind("<<TreeviewSelect>>",
-                                     lambda e: self.autocompletar_desde_tabla(self.tree_no_ingresados))
+        self.tree_no_ingresados.bind("<<TreeviewSelect>>", lambda e: self.autocompletar_desde_tabla(self.tree_no_ingresados))
 
-        self.frame_form = tk.Frame(root)
+        # Formularios
+        self.frame_form = tk.Frame(self.scroll_frame)
         self.frame_form.pack(padx=10, pady=5)
 
         self.entries = {}
@@ -90,18 +123,12 @@ class VistaListaApp:
             self.entries[campo.lower()] = entry
 
         self.lista_destino = tk.StringVar(value="Ingresados")
-
         tk.Radiobutton(self.frame_form, text="Ingresados", variable=self.lista_destino, value="Ingresados").grid(row=0, column=2)
         tk.Radiobutton(self.frame_form, text="No Ingresados", variable=self.lista_destino, value="No Ingresados").grid(row=1, column=2)
-        
-        tk.Radiobutton(self.frame_form, text="Ingresados", variable=self.lista_destino, value="Ingresados").grid(row=0,
-                                                                                                                 column=2)
-        tk.Radiobutton(self.frame_form, text="No Ingresados", variable=self.lista_destino, value="No Ingresados").grid(
-            row=1, column=2)
 
-        self.frame_btns = tk.Frame(root)
+        # Botones
+        self.frame_btns = tk.Frame(self.scroll_frame)
         self.frame_btns.pack(pady=5)
-
 
         tk.Button(self.frame_btns, text="Agregar Estudiante", command=self.agregar_estudiante).grid(row=0, column=0, padx=5)
         tk.Button(self.frame_btns, text="Eliminar de Ingresados", command=lambda: self.eliminar_estudiante(self.lista_ingresados)).grid(row=0, column=1, padx=5)
@@ -111,25 +138,13 @@ class VistaListaApp:
         tk.Button(self.frame_btns, text="Mover Todos a Ingresados", command=self.mover_todos_no_ingresados).grid(row=1, column=0, pady=5)
         tk.Button(self.frame_btns, text="Mover Todos a No Ingresados", command=self.mover_todos_ingresados).grid(row=1, column=1, pady=5)
         tk.Button(self.frame_btns, text="Identificacion de estudiantes", command=self.identificacion_estudiantes).grid(row=1, column=2, pady=5)
-        tk.Button(
-            self.frame_btns,
-            text="Reportes Estadísticos",
-            command=self.mostrar_reportes
-        ).grid(row=1, column=3, columnspan=4, pady=5)
+        tk.Button(self.frame_btns, text="Reportes Estadísticos", command=self.mostrar_reportes).grid(row=1, column=3, columnspan=4, pady=5)
 
-
-        btn_style = {'padx': 5, 'pady': 2, 'width': 20}
-
-       
-        
-
-        # self.label_img_grafo = tk.Label(root)
-        # self.label_img_grafo.pack(pady=10)
-        # Canvas para dibujar
-
-        self.canvas = tk.Canvas(self.root, bg="white")
+        # Canvas para el grafo
+        self.canvas = tk.Canvas(self.scroll_frame, bg="white")
         self.canvas.pack(fill=tk.BOTH, padx=20, pady=20, expand=True)
 
+        
         self.actualizar_tablas()
 
     def crear_tabla(self, titulo, col):
@@ -204,14 +219,7 @@ class VistaListaApp:
         cedula, nombre, carrera, materias, uc_aprobadas = datos
 
         estudiante = Estudiante(cedula, nombre, carrera, materias, uc_aprobadas)
-        # Validaciones campos de entrada
-        if not cedula.isdigit():
-            messagebox.showerror("Error de Validación", "La cédula debe contener solo números.")
-            return
-        if not uc_aprobadas.isdigit():
-            messagebox.showerror("Error de Validación", "Las UC Aprobadas deben ser un número.")
-
-            return
+        ##########
 
         # Validar exclusividad por grupo
         for grupo in grupos_excluyentes:
@@ -235,7 +243,9 @@ class VistaListaApp:
      estudiante.materias = materias_validadas
      estudiante.creditos_totales = creditos_totales
 
+
      destino = self.lista_ingresados if self.lista_destino.get() == "Ingresados" else self.lista_no_ingresados
+
 
      # Insertar al final de la lista usando InsDespues
      if destino.Vacia():
@@ -251,9 +261,52 @@ class VistaListaApp:
      self.limpiar_campos()
 
 
+    # Filtro por Combobox para tabla ingresados 'todos' e 'irregulares' 
+    def filtrando_ingresados(self, event=None):
+     filtro = self.combobox_filtro_ingresados.get().lower()
 
+     for item in self.tree_ingresados.get_children():
+        self.tree_ingresados.delete(item)
 
     
+     actual = self.lista_ingresados.Primero
+     while actual:
+        estudiante = actual.info 
+        mostrar = True
+
+        try:
+            uc_aprobadas = int(estudiante.uc_aprobadas)
+        except ValueError:
+            uc_aprobadas = 0
+
+      
+        creditos_inscritos = 0
+        for materia in estudiante.materias:
+            if materia in MATERIAS_CREDITOS:
+                creditos_inscritos += MATERIAS_CREDITOS[materia]
+
+          #Criterio de cuando es irregular un estudiante      
+        if filtro == "irregulares":
+            if uc_aprobadas >= 14 and creditos_inscritos < 8:
+                mostrar = True
+            else:
+                mostrar = False
+
+         #Se muestran los que cumplieron con la condicion 
+        if mostrar:
+            self.tree_ingresados.insert('', 'end', values=(
+                estudiante.identificacion,
+                estudiante.nombre,
+                estudiante.edad,
+                ', '.join(estudiante.materias),
+                estudiante.uc_aprobadas
+            ))
+
+        
+        actual = actual.prox
+    
+
+
 
 
 
