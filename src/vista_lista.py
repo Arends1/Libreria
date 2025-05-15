@@ -5,6 +5,8 @@ from Lista import Lista
 from collections import defaultdict
 from Identificacion_estudiante import VistaIdentificacion_estudiantes
 from detector_duplicados import detectar_duplicados
+from Pila import Pila  
+import json
 
 # Diccionario de materias y sus créditos
 MATERIAS_CREDITOS = {
@@ -35,6 +37,11 @@ grupos_excluyentes = [
     ["Programacion No Numerica I", "Programacion No Numerica II"]
 ]
 
+# <-- Importar la pila
+
+# Ruta del archivo temporal para guardar los datos
+TEMP_FILE = "temp_estudiantes.json"
+
 class VistaListaApp:
     def __init__(self, root):
         self.nodo_seleccionado = None
@@ -60,6 +67,10 @@ class VistaListaApp:
         
         self.lista_ingresados = Lista()
         self.lista_no_ingresados = Lista()
+
+        self.pila_versiones = Pila()  # <-- Instancia de la pila para versiones
+        
+        self.titulo = tk.Label(self.root, text="Gestión de Estudiantes", font=("Arial", 20))
 
         # 
         self.titulo = tk.Label(self.scroll_frame, text="Gestión de Estudiantes", font=("Arial", 20))
@@ -92,6 +103,10 @@ class VistaListaApp:
         self.entry_buscar_no_ingresados = tk.Entry(self.frame_busquedas)
         self.entry_buscar_no_ingresados.grid(row=0, column=5, padx=(20, 5))
         self.entry_buscar_no_ingresados.bind("<KeyRelease>", self.filtrar_no_ingresados)
+
+        # Botón de "Atrás" o "Regresar" al lado del label de filtrar
+        self.btn_regresar = tk.Button(self.frame_busquedas, text="Regresar", command=self.regresar)
+        self.btn_regresar.grid(row=0, column=0, padx=(0, 10), sticky="w")
 
         # Tablas
         self.frame_tablas = tk.Frame(self.scroll_frame)
@@ -142,12 +157,31 @@ class VistaListaApp:
         tk.Button(self.frame_btns, text="Identificacion de estudiantes", command=self.identificacion_estudiantes).grid(row=1, column=2, pady=5)
         tk.Button(self.frame_btns, text="Reportes Estadísticos", command=self.mostrar_reportes).grid(row=1, column=3, columnspan=4, pady=5)
 
+        btn_style = {'padx': 5, 'pady': 2, 'width': 20}
+
+        tk.Button(self.frame_btns, text="Retirar Materias", command=self.eliminar_materia_estudiante).grid(row=2, column=0, pady=5)
+
+        # self.label_img_grafo = tk.Label(root)
+        # self.label_img_grafo.pack(pady=10)
+        # Canvas para dibujar
+
+        self.canvas = tk.Canvas(self.root, bg="white")
         # Canvas para el grafo
         self.canvas = tk.Canvas(self.scroll_frame, bg="white")
         self.canvas.pack(fill=tk.BOTH, padx=20, pady=20, expand=True)
 
         
         self.actualizar_tablas()
+
+        # Botón de "Atrás" o "Regresar"
+        self.btn_regresar = tk.Button(self.scroll_frame, text="Regresar", command=self.regresar)
+        self.btn_regresar.pack(side="top", anchor="w", padx=10, pady=5)
+
+        # Cargar datos guardados temporalmente
+        self.cargar_datos_temporales()
+
+    def regresar(self):
+        self.root.destroy()
 
     def crear_tabla(self, titulo, col):
         frame = tk.Frame(self.frame_tablas)
@@ -221,6 +255,15 @@ class VistaListaApp:
         cedula, nombre, carrera, materias, uc_aprobadas = datos
 
         estudiante = Estudiante(cedula, nombre, carrera, materias, uc_aprobadas)
+        # Validaciones campos de entrada
+        if not cedula.isdigit():
+            messagebox.showerror("Error de Validación", "La cédula debe contener solo números.")
+            return False
+
+        if not uc_aprobadas.isdigit():
+            messagebox.showerror("Error de Validación", "Las UC Aprobadas deben ser un número.")
+
+            return
         ##########
 
         # Validar exclusividad por grupo
@@ -262,6 +305,9 @@ class VistaListaApp:
      self.actualizar_tablas()
      self.limpiar_campos()
 
+        # Guardar los datos temporalmente después de agregar un estudiante
+     self.guardar_datos_temporales()
+
 
     # Filtro por Combobox para tabla ingresados 'todos' e 'irregulares' 
     def filtrando_ingresados(self, event=None):
@@ -297,7 +343,7 @@ class VistaListaApp:
          #Se muestran los que cumplieron con la condicion 
         if mostrar:
             self.tree_ingresados.insert('', 'end', values=(
-                estudiante.identificacion,
+                estudiante.cedula,
                 estudiante.nombre,
                 estudiante.edad,
                 ', '.join(estudiante.materias),
@@ -338,7 +384,7 @@ class VistaListaApp:
      p = lista.Primero
      ant = None
      while p:
-        if p.info.identificacion == cedula:
+        if p.info.cedula == cedula:
             if ant:
                 lista.EliDespues(ant)
             else:
@@ -384,6 +430,56 @@ class VistaListaApp:
                 self.entries[key].delete(0, tk.END)
                 self.entries[key].insert(0, value)
 
+        item = tree.selection()
+        if item:
+            datos = tree.item(item[0])["values"]
+            claves = list(self.entries.keys())
+            for i in range(len(claves)):
+                self.entries[claves[i]].delete(0, tk.END)
+                self.entries[claves[i]].insert(0, datos[i])
+            # Guardar versión anterior de materias al seleccionar
+            self.cedula_seleccionada = datos[0]
+            estudiante = self.lista_ingresados.Buscar(self.cedula_seleccionada)
+            if estudiante:
+                # Guardar copia de materias antes de modificar
+                self.pila_versiones.Insertar((self.cedula_seleccionada, estudiante.info.materias))
+
+    def deshacer_cambio_materias(self):
+        # Recuperar la última versión guardada
+        version = self.pila_versiones.Remover()
+        if version:
+            cedula, materias_anteriores = version
+            nodo = self.lista_ingresados.Buscar(cedula)
+            if nodo:
+                nodo.info.materias = materias_anteriores
+                self.actualizar_tablas()
+                messagebox.showinfo("Deshacer", f"Materias restauradas para el estudiante {cedula}")
+            else:
+                messagebox.showwarning("No encontrado", "No se encontró el estudiante para deshacer.")
+        else:
+            messagebox.showwarning("Sin cambios", "No hay cambios para deshacer.")
+
+    def abrir_ventana_pilas(self, estudiante):
+        import tkinter as tk
+        from vista_pilas import InscripcionesApp
+        ventana_pilas = tk.Toplevel(self.root)
+        def actualizar_estudiante(est):
+            self.actualizar_tablas()
+        InscripcionesApp(ventana_pilas, estudiante, on_close=actualizar_estudiante)
+
+    def eliminar_materia_estudiante(self):
+        cedula = self.entries["cédula"].get().strip()
+        if not cedula:
+            messagebox.showwarning("Cédula Vacía", "Ingrese la cédula para modificar materias.")
+            return
+        # Buscar estudiante en ingresados
+        p = self.lista_ingresados.Primero
+        while p:
+            if p.info.cedula == cedula:
+                self.abrir_ventana_pilas(p.info)
+                return
+            p = p.prox
+        messagebox.showinfo("No encontrado", "Cédula no encontrada en ingresados.")
 
     def limpiar_campos(self):
         for entry in self.entries.values():
@@ -402,8 +498,8 @@ class VistaListaApp:
             tree.delete(item)
         p = lista.Primero
         while p:
-            if texto in p.info.identificacion.lower():
-                tree.insert("", tk.END, values=[p.info.identificacion, p.info.nombre, p.info.edad,", ".join(p.info.materias), p.info.uc_aprobadas])
+            if texto in p.info.cedula.lower():
+                tree.insert("", tk.END, values=[p.info.cedula, p.info.nombre, p.info.carrera, ", ".join(p.info.materias), p.info.uc_aprobadas])
             p = p.prox
 
     def actualizar_tablas(self):
@@ -430,15 +526,15 @@ class VistaListaApp:
             color = "red" if p == self.lista_ingresados.Primero else (
                 "lightgreen" if p == self.nodo_seleccionado else "lightblue")
             self.canvas.create_rectangle(x - 50, y - 30, x + 50, y + 30, fill=color,
-                                         tags=f"nodo_{p.info.identificacion}")
+                                         tags=f"nodo_{p.info.cedula}")
             small_rect_width = 20
             self.canvas.create_rectangle(x + 50, y - 30, x + 50 + small_rect_width, y + 30, fill=color,
-                                         tags=f"nodo_{p.info.identificacion}")
+                                         tags=f"nodo_{p.info.cedula}")
             # Dibujar flecha si hay próximo nodo
             if p.prox is None:
                 self.canvas.create_line(x + 50, y + 30, x + 50 + small_rect_width, y - 30,
-                                        tags=f"nodo_{p.info.identificacion}")
-            self.canvas.create_text(x, y, text=str(p.info.identificacion), font=("Arial", 12))
+                                        tags=f"nodo_{p.info.cedula}")
+            self.canvas.create_text(x, y, text=str(p.info.cedula), font=("Arial", 12))
 
             if p.prox is not None:
                 self.canvas.create_line(x + 70, y, x + separacion - 30, y, arrow=tk.LAST)
@@ -446,7 +542,7 @@ class VistaListaApp:
             if p == self.lista_ingresados.Primero:
                 self.canvas.create_text(x, y - 50, text="Primero", fill="red", font=("Arial", 10, "bold"))
             # Asignar evento de clic para selección
-            self.canvas.tag_bind(f"nodo_{p.info}", "<Button-1>", lambda e, nodo=p: self.seleccionar_nodo(nodo))
+            self.canvas.tag_bind(f"nodo_{p.info.cedula}", "<Button-1>", lambda e, nodo=p: self.seleccionar_nodo(nodo))
 
             x += separacion
             p = p.prox
@@ -620,6 +716,62 @@ class VistaListaApp:
 
             for materia, cant in sorted(materias.items(), key=lambda x: x[1], reverse=True)[:5]:
                 ttk.Label(frame, text=f"- {materia}: {cant} estudiantes", font=('Arial', 10)).pack(anchor='w', padx=20)
+
+    def guardar_datos_temporales(self):
+        """Guarda los datos de los estudiantes en un archivo JSON temporal."""
+        datos = {
+            "ingresados": [
+                {
+                    "cedula": estudiante.cedula,
+                    "nombre": estudiante.nombre,
+                    "carrera": estudiante.carrera,
+                    "materias": estudiante.materias,
+                    "uc_aprobadas": estudiante.uc_aprobadas
+                }
+                for estudiante in self.lista_ingresados.obtener_todos()
+            ],
+            "no_ingresados": [
+                {
+                    "cedula": estudiante.identificacion,
+                    "nombre": estudiante.nombre,
+                    "carrera": estudiante.carrera,
+                    "materias": estudiante.materias,
+                    "uc_aprobadas": estudiante.uc_aprobadas
+                }
+                for estudiante in self.lista_no_ingresados.obtener_todos()
+            ]
+        }
+        with open(TEMP_FILE, "w") as file:
+            json.dump(datos, file)
+
+    def cargar_datos_temporales(self):
+        """Carga los datos de los estudiantes desde un archivo JSON temporal."""
+        try:
+            with open(TEMP_FILE, "r") as file:
+                datos = json.load(file)
+                for estudiante_data in datos.get("ingresados", []):
+                    estudiante = Estudiante(
+                        estudiante_data["cedula"],
+                        estudiante_data["nombre"],
+                        estudiante_data["carrera"],
+                        estudiante_data["materias"],
+                        estudiante_data["uc_aprobadas"]
+                    )
+                    self.lista_ingresados.InsComienzo(estudiante)
+
+                for estudiante_data in datos.get("no_ingresados", []):
+                    estudiante = Estudiante(
+                        estudiante_data["cedula"],
+                        estudiante_data["nombre"],
+                        estudiante_data["carrera"],
+                        estudiante_data["materias"],
+                        estudiante_data["uc_aprobadas"]
+                    )
+                    self.lista_no_ingresados.InsComienzo(estudiante)
+
+                self.actualizar_tablas()
+        except FileNotFoundError:
+            pass
 
 
 if __name__ == "__main__":
