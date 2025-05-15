@@ -451,6 +451,12 @@ class VistaListaApp:
             cedula, materias_anteriores = version
             nodo = self.lista_ingresados.Buscar(cedula)
             if nodo:
+                # Validar restricciones antes de restaurar
+                creditos_totales = sum(MATERIAS_CREDITOS[m] for m in materias_anteriores if m in MATERIAS_CREDITOS)
+                if creditos_totales > 16:
+                    messagebox.showerror("Error de Créditos", "No se puede deshacer porque excede el límite de créditos.")
+                    return
+
                 nodo.info.materias = materias_anteriores
                 self.actualizar_tablas()
                 messagebox.showinfo("Deshacer", f"Materias restauradas para el estudiante {cedula}")
@@ -465,13 +471,14 @@ class VistaListaApp:
         ventana_pilas = tk.Toplevel(self.root)
         def actualizar_estudiante(est):
             self.actualizar_tablas()
-        InscripcionesApp(ventana_pilas, estudiante, on_close=actualizar_estudiante)
+        InscripcionesApp(ventana_pilas, estudiante, on_close=actualizar_estudiante, materias_creditos=MATERIAS_CREDITOS)
 
     def eliminar_materia_estudiante(self):
         cedula = self.entries["cédula"].get().strip()
         if not cedula:
             messagebox.showwarning("Cédula Vacía", "Ingrese la cédula para modificar materias.")
             return
+
         # Buscar estudiante en ingresados
         p = self.lista_ingresados.Primero
         while p:
@@ -479,6 +486,7 @@ class VistaListaApp:
                 self.abrir_ventana_pilas(p.info)
                 return
             p = p.prox
+
         messagebox.showinfo("No encontrado", "Cédula no encontrada en ingresados.")
 
     def limpiar_campos(self):
@@ -681,41 +689,19 @@ class VistaListaApp:
         frame = ttk.Frame(parent)
         frame.pack(fill=tk.BOTH, expand=True, padx=20, pady=20)
 
-        uc_aprobadas = []
-        materias = defaultdict(int)
-
-        for lista in [self.lista_ingresados, self.lista_no_ingresados]:
-            p = lista.Primero
-            while p:
-                if hasattr(p.info, 'uc_aprobadas'):
-                    try:
-                        uc_aprobadas.append(int(p.info.uc_aprobadas))
-                    except:
-                        pass
-                if hasattr(p.info, 'materias'):
-
-                    materias[", ".join(p.info.materias)] += 1
-
-                    materias[p.info.materias] += 1
-
-                p = p.prox
+        materias = {}
+        actual = self.lista_ingresados.Primero
+        while actual:
+            for materia in actual.info.materias:
+                if materia not in materias:
+                    materias[materia] = 0
+                materias[materia] += 1
+            actual = actual.prox
 
         ttk.Label(frame, text="DATOS ACADÉMICOS", font=('Arial', 14, 'bold')).pack(pady=10)
 
-        if uc_aprobadas:
-            stats_frame = ttk.Frame(frame)
-            stats_frame.pack(fill=tk.X, pady=10)
-
-            ttk.Label(stats_frame, text=f"UC aprobadas (promedio): {sum(uc_aprobadas) / len(uc_aprobadas):.1f}",
-                      font=('Arial', 10)).pack(side=tk.LEFT, padx=20)
-            ttk.Label(stats_frame, text=f"Mínimo: {min(uc_aprobadas)}", font=('Arial', 10)).pack(side=tk.LEFT, padx=20)
-            ttk.Label(stats_frame, text=f"Máximo: {max(uc_aprobadas)}", font=('Arial', 10)).pack(side=tk.LEFT, padx=20)
-
-        if materias:
-            ttk.Label(frame, text="Materias más frecuentes:", font=('Arial', 12)).pack(pady=10, anchor='w')
-
-            for materia, cant in sorted(materias.items(), key=lambda x: x[1], reverse=True)[:5]:
-                ttk.Label(frame, text=f"- {materia}: {cant} estudiantes", font=('Arial', 10)).pack(anchor='w', padx=20)
+        for materia, cantidad in materias.items():
+            ttk.Label(frame, text=f"{materia}: {cantidad} estudiantes", font=('Arial', 12)).pack(anchor="w", padx=10)
 
     def guardar_datos_temporales(self):
         """Guarda los datos de los estudiantes en un archivo JSON temporal."""

@@ -1,6 +1,6 @@
 import tkinter as tk
 import subprocess
-from vista_pilas import VersionControlApp
+from vista_pilas import InscripcionesApp
 
 # Funciones para los botones
 def abrir_listas():
@@ -8,7 +8,7 @@ def abrir_listas():
 
 def abrir_pilas():
     ventana_pilas = tk.Tk()
-    app = VersionControlApp(ventana_pilas)
+    app = InscripcionesApp(ventana_pilas)
     ventana_pilas.mainloop()
 
 def abrir_colas():
