@@ -4,6 +4,7 @@ from Estudiante import Estudiante
 from Lista import Lista
 from collections import defaultdict
 from Identificacion_estudiante import VistaIdentificacion_estudiantes
+from detector_duplicados import detectar_duplicados
 
 # Diccionario de materias y sus créditos
 MATERIAS_CREDITOS = {
@@ -134,6 +135,7 @@ class VistaListaApp:
         tk.Button(self.frame_btns, text="Eliminar de Ingresados", command=lambda: self.eliminar_estudiante(self.lista_ingresados)).grid(row=0, column=1, padx=5)
         tk.Button(self.frame_btns, text="Eliminar de No Ingresados", command=lambda: self.eliminar_estudiante(self.lista_no_ingresados)).grid(row=0, column=2, padx=5)
         tk.Button(self.frame_btns, text="Limpiar Campos", command=self.limpiar_campos).grid(row=0, column=3, padx=5)
+        tk.Button(self.frame_btns, text="Detectar Duplicados", command=lambda: detectar_duplicados(self.lista_ingresados, self.lista_no_ingresados, self.root)).grid(row=0, column=4, padx=5)
 
         tk.Button(self.frame_btns, text="Mover Todos a Ingresados", command=self.mover_todos_no_ingresados).grid(row=1, column=0, pady=5)
         tk.Button(self.frame_btns, text="Mover Todos a No Ingresados", command=self.mover_todos_ingresados).grid(row=1, column=1, pady=5)
